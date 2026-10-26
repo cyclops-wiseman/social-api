@@ -1,0 +1,18 @@
+# .env file
+.env
+
+# python virtual environment
+env
+
+# DB
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Loadtesting
+loadtest/tokens.json
+
+# folders
+__pycache__/
+.pytest_cache/
