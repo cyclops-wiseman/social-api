@@ -340,6 +340,76 @@ def health():
         )
 
 
+@app.post("/auth/register")
+async def register(request: Request):
+    """Register a new user and issue an authentication token.
+
+    Parses and validates the JSON request body, checks the username
+    format, and creates a new user in the database. If registration
+    succeeds, generates a signed JWT containing the user's ID and
+    username, valid for 24 hours.
+
+    Args:
+        request: The incoming HTTP request containing a JSON body
+            with the desired username.
+
+    Returns:
+        JSONResponse: A response with status code 201 containing the
+        registered user's ID and username, an authentication token,
+        the token type, and its expiration duration in seconds.
+        Returns an error response with status code 400 for malformed
+        JSON or an invalid username, or 409 if the username already
+        exists.
+    """
+    try: 
+        payload = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        return error("malformed JSON body", 400)
+
+    username = payload.get("username") if isinstance(payload, dict) else None
+    if not isinstance(username, str):
+        return error("username is required", 400)
+
+    username = username.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_]{3,32}", username):
+        return error(
+            "username must be 3-32 characters using letters, numbers or underscores",
+            400,
+        )
+
+    try: 
+        with connect() as db:
+            cursor = db.execute(
+                "INSERT INTO users(username) VALUES (?)",
+                (username,),
+            )
+            user_id = cursor.lastrowid
+    except sqlite3.IntegrityError:
+        return error("username already exists", 409)
+
+    now = int(time.time())
+    token = jwt.encode(
+        {
+            "sub": str(user_id),
+            "username": username,
+            "iat": now,
+            "exp": now + 86400,
+        },
+        JWT_SECRET,
+        algorithm="H256"
+    )
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "user": {"id": user_id, "username": username},
+            "token": token,
+            "token_type": "bearer",
+            "expires_in": 86400,
+        },
+    )
+
+
 @app.get("/feed")
 def feed():
     """Retrieve the latest posts for the feed.
